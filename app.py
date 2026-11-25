@@ -1,5 +1,6 @@
 import os
 import io
+import zipfile
 import urllib.request
 import numpy as np
 import onnxruntime as ort
@@ -19,22 +20,23 @@ app.add_middleware(
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "eurosat_99.onnx")
-
-# GitHub Release'ga yuklagan .onnx faylingizning to'g'ridan-to'g'ri havolasini shu yerga qo'ying:
-MODEL_URL = "https://github.com/SIZNING_USERNAME/eurosat-classifier/releases/download/v1.0/eurosat_99.onnx"
+MODEL_PATH = os.path.join(BASE_DIR, "eurosat_99_quant.onnx")
+ZIP_PATH = os.path.join(BASE_DIR, "eurosat_99_quant.zip")
+MODEL_URL = "https://github.com/sultanovAlaw/eurosat-web/releases/download/v1.0/eurosat_99_quant.zip"
 
 if not os.path.exists(MODEL_PATH):
-    print("Model yuklanmoqda...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    print("Model yuklandi!")
+    print("Model arxivi GitHub Release'dan yuklanmoqda...")
+    urllib.request.urlretrieve(MODEL_URL, ZIP_PATH)
+    with zipfile.ZipFile(ZIP_PATH, "r") as zf:
+        zf.extractall(BASE_DIR)
+    os.remove(ZIP_PATH)
+    print("Model arxivdan chiqarildi va tayyor!")
 
 CLASSES = [
     "AnnualCrop", "Forest", "HerbaceousVegetation", "Highway", "Industrial",
     "Pasture", "PermanentCrop", "Residential", "River", "SeaLake"
 ]
 
-# ONNX Runtime sessiyasi (xotirani minimal ishlatadi)
 session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
 input_name = session.get_inputs()[0].name
 
@@ -44,8 +46,8 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     arr = (arr - mean) / std
-    arr = np.transpose(arr, (2, 0, 1))  # HWC -> CHW
-    return np.expand_dims(arr, axis=0)  # (1, 3, 224, 224)
+    arr = np.transpose(arr, (2, 0, 1))
+    return np.expand_dims(arr, axis=0)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
