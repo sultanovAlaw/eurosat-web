@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EuroSAT AI — Sun'iy Yo'ldosh Tasvirlari Klassifikatori (99.06%)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+  <div class="max-w-4xl mx-auto px-4 py-10">
+    <header class="text-center mb-10">
+      <span class="px-3 py-1 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
+        ConvNeXt-Base • Val Accuracy: 99.06%
+      </span>
+      <h1 class="text-3xl md:text-4xl font-bold mt-4 bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+        EuroSAT Yer Qoplamini Tasniflash Tizimi
+      </h1>
+      <p class="text-slate-400 mt-2">Sentinel-2 sun'iy yo'ldosh tasvirini yuklang va 10 ta sinf bo'yicha real AI tahlilini oling</p>
+    </header>
+
+    <div class="grid md:grid-cols-2 gap-6 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+      <!-- Rasm yuklash qismi -->
+      <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-emerald-500 transition rounded-xl p-6 text-center cursor-pointer" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*" class="hidden" />
+        <img id="previewImg" class="hidden w-56 h-56 object-cover rounded-lg mb-4 shadow-md border border-slate-700" />
+        <div id="uploadPrompt">
+          <p class="text-lg font-medium text-slate-200">Tasvirni tanlang yoki shu yerga tashlang</p>
+          <p class="text-xs text-slate-500 mt-1">JPG, PNG, TIF formatlari qo'llab-quvvatlanadi</p>
+        </div>
+        <button onclick="document.getElementById('fileInput').click()" class="mt-4 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition">
+          Rasm yuklash
+        </button>
+      </div>
+
+      <!-- Natijalar qismi -->
+      <div class="flex flex-col justify-between">
+        <div>
+          <h2 class="text-sm uppercase tracking-wider text-slate-400 font-semibold mb-3">Tahlil Natijasi</h2>
+          <div id="loading" class="hidden text-emerald-400 animate-pulse py-8 text-center">
+            AI model tahlil qilmoqda...
+          </div>
+          <div id="resultBox" class="hidden">
+            <div class="p-4 rounded-xl bg-slate-800/90 border border-emerald-500/40 mb-4">
+              <div class="text-xs text-slate-400">Aniqlangan yer qoplami:</div>
+              <div class="flex items-baseline justify-between mt-1">
+                <span id="topClass" class="text-2xl font-bold text-emerald-400">—</span>
+                <span id="topConf" class="text-xl font-semibold text-white">0%</span>
+              </div>
+            </div>
+            <div id="barsContainer" class="space-y-2.5 max-h-60 overflow-y-auto pr-1"></div>
+          </div>
+          <div id="emptyState" class="text-slate-500 text-sm py-12 text-center">
+            Natijani ko'rish uchun chap tomondan sun'iy yo'ldosh tasvirini yuklang.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const UZ_NAMES = {
+      "AnnualCrop": "Bir yillik ekinlar (AnnualCrop)",
+      "Forest": "O'rmon hududi (Forest)",
+      "HerbaceousVegetation": "O'tloq o'simliklar (HerbaceousVegetation)",
+      "Highway": "Avtomobil yo'li (Highway)",
+      "Industrial": "Sanoat hududi (Industrial)",
+      "Pasture": "Yaylov (Pasture)",
+      "PermanentCrop": "Ko'p yillik ekinlar (PermanentCrop)",
+      "Residential": "Turar-joy binolari (Residential)",
+      "River": "Daryo (River)",
+      "SeaLake": "Dengiz va ko'l (SeaLake)"
+    };
+
+    const fileInput = document.getElementById("fileInput");
+    const previewImg = document.getElementById("previewImg");
+    const uploadPrompt = document.getElementById("uploadPrompt");
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      previewImg.src = URL.createObjectURL(file);
+      previewImg.classList.remove("hidden");
+      uploadPrompt.classList.add("hidden");
+
+      document.getElementById("emptyState").classList.add("hidden");
+      document.getElementById("resultBox").classList.add("hidden");
+      document.getElementById("loading").classList.remove("hidden");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/predict", { method: "POST", body: formData });
+        const data = await res.json();
+
+        document.getElementById("topClass").textContent = UZ_NAMES[data.top_class] || data.top_class;
+        document.getElementById("topConf").textContent = data.confidence + "%";
+
+        const container = document.getElementById("barsContainer");
+        container.innerHTML = "";
+        data.all_predictions.slice(0, 5).forEach(item => {
+          const label = UZ_NAMES[item.class] || item.class;
+          container.innerHTML += `
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">${label}</span>
+                <span class="text-slate-400 font-mono">${item.confidence}%</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-2">
+                <div class="bg-emerald-500 h-2 rounded-full" style="width: ${item.confidence}%"></div>
+              </div>
+            </div>`;
+        });
+
+        document.getElementById("loading").classList.add("hidden");
+        document.getElementById("resultBox").classList.remove("hidden");
+      } catch (err) {
+        alert("Server bilan bog'lanishda xatolik yuz berdi!");
+        document.getElementById("loading").classList.add("hidden");
+      }
+    });
+  </script>
+</body>
+</html>
